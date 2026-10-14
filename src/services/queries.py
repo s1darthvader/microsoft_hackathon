@@ -45,7 +45,7 @@ def list_orders(customer_id=None, outlet_id=None, status=None, order_id=None, vi
     sql = (
         "SELECT o.id, o.outlet_id, ou.name AS outlet_name, o.slot_id, s.date, s.start_time, "
         "s.end_time, o.customer_id, o.customer_name, o.status, o.review_reason, "
-        "o.closure_reason, o.created_at "
+        "o.closure_reason, o.payment_ref, o.created_at "
         "FROM orders o JOIN outlet ou ON ou.id = o.outlet_id JOIN pickup_slot s ON s.id = o.slot_id"
     )
     if where:
@@ -59,8 +59,9 @@ def list_orders(customer_id=None, outlet_id=None, status=None, order_id=None, vi
             o = dict(row)
             o["slot_label"] = clock.slot_label(o)
             o["lines"] = [dict(r) for r in conn.execute(
-                "SELECT l.item_id, m.name, l.quantity FROM order_line l "
+                "SELECT l.item_id, m.name, m.price, l.quantity FROM order_line l "
                 "JOIN menu_item m ON m.id = l.item_id WHERE l.order_id = ? ORDER BY m.id", (o["id"],))]
+            o["total"] = sum(line["price"] * line["quantity"] for line in o["lines"])
             o["history"] = [dict(r) for r in conn.execute(
                 "SELECT from_status, to_status, actor, reason, timestamp FROM order_status_history "
                 "WHERE order_id = ? ORDER BY id", (o["id"],))]
@@ -89,5 +90,5 @@ def get_order(order_id, viewer=None):
 def list_items(outlet_id) -> list:
     with read() as conn:
         return [dict(r) for r in conn.execute(
-            "SELECT id AS item_id, name, category FROM menu_item WHERE outlet_id = ? ORDER BY id",
+            "SELECT id AS item_id, name, category, price FROM menu_item WHERE outlet_id = ? ORDER BY id",
             (outlet_id,))]

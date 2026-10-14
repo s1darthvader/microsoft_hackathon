@@ -12,16 +12,44 @@ streamlit run src/app.py
 pytest src/tests
 ```
 
-Data lives in `src/campus_food.db` and survives restarts. Use **Reset demo data** in the
-sidebar to return to the seed state. The **app clock** (sidebar) starts at 4 Aug 2026 10:00
+Data lives in `src/campus_food.db` and survives restarts. An older database is reseeded
+automatically when the schema version changes. Use **Reset demo data** (sidebar, *Demo tools*)
+to return to the seed state; it also signs you out. The **app clock** (sidebar) starts at 4 Aug 2026 10:00
 and drives slot cut-offs and every timestamp.
+
+## Sign in
+
+Every stakeholder signs in; the role, and for staff and managers the outlet, come from the
+account. All demo accounts use the password `demo123`:
+
+| Username | Role | Outlet |
+| --- | --- | --- |
+| `student1`, `student2` | Customer (campus IDs S101, S102) | |
+| `canteen.staff`, `kiosk.staff` | Outlet Staff | Main Canteen, Snack Kiosk |
+| `canteen.mgr`, `kiosk.mgr` | Outlet Manager | Main Canteen, Snack Kiosk |
+| `admin` | Campus Admin | |
+
+Passwords are PBKDF2-hashed (`core/passwords.py`, `services/auth.py`). A browser refresh starts a
+new Streamlit session, so you sign in again; your drafts are restored.
+
+## Drafts and demo payment
+
+- **Drafts** (`services/drafts.py`, `ui/common.persist`): the customer's outlet, date, slot and
+  quantities, and a staff member's typed reject/cancel reasons, are saved per user on every
+  change and restored after sign-out, refresh or a slot change. A placed order clears the
+  quantities; a reject or outlet cancel clears that order's reason.
+- **Checkout** (`ui/customer._checkout`): *Review & pay* shows the priced order and a mock Card /
+  UPI / Pay-at-counter form with format checks only. No money moves and payment details are
+  never stored; the order keeps only a `DEMO-...` reference (`orders.payment_ref`). Stock is
+  still checked when you pay, and a refused order offers later slots that return to checkout.
 
 ## Layout
 
 ```
-app.py        entry point: sidebar, role router
+app.py        entry point: sign-in gate, sidebar, role router
 core/         rules.py (statuses, TRANSITIONS table, BusinessRuleError)
-              db.py (connections, BEGIN IMMEDIATE tx)  seed.py (seed data, init, reset)
+              db.py (connections, BEGIN IMMEDIATE tx)  seed.py (seed data, users, init, reset)
+              passwords.py (PBKDF2 hashing)
 services/     business logic, one module per area, no UI imports
 ui/           Streamlit pages, call services only
 tests/        one test per acceptance scenario (AT-01 .. AT-18) plus edge cases
@@ -51,8 +79,7 @@ Dependency direction is `ui -> services -> core`. Every status change goes throu
 
 ## Assumptions kept from the spec
 
-A3 app clock, A4 no auth (campus ID plus pickup code; the code is shown once at submit and never
-returned by queries), A7 Collected keeps counting, A9 hybrid confirmation (threshold 10),
+A3 app clock, A7 Collected keeps counting, A9 hybrid confirmation (threshold 10),
 A13 outlet cancel only from Confirmed.
 
 ## Status
@@ -65,5 +92,9 @@ written in the same transaction as the change they describe (`services/notificat
 Also built: the "next available slot" suggestion bonus (`services/suggestions.py`). It only
 advises; booking a suggested slot re-runs the full `submit_order` validation.
 
-Not built: anything the spec lists as out of scope (login, payments, editing a submitted
-pre-order, no-show handling).
+Changed from the spec: A4 (no auth) is replaced by per-stakeholder sign-in; the pickup code is
+still required to cancel or collect, is shown once at submit and is never returned by queries.
+A10 (no payment) is relaxed to prices plus a demo checkout that takes no money.
+
+Not built: real payments or refunds, account management (creating users, changing passwords),
+editing a submitted pre-order, no-show handling.

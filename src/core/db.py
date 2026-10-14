@@ -6,8 +6,10 @@ from pathlib import Path
 
 DEFAULT_DB = Path(__file__).resolve().parent.parent / "campus_food.db"
 
+SCHEMA_VERSION = "2"  # bump when SCHEMA changes; init_db reseeds an older database
+
 TABLES = (
-    "notification", "order_status_history", "order_line", "orders",
+    "draft", "app_user", "notification", "order_status_history", "order_line", "orders",
     "slot_item_availability", "pickup_slot", "menu_item", "outlet", "app_setting",
 )
 
@@ -24,6 +26,7 @@ CREATE TABLE IF NOT EXISTS menu_item (
     name TEXT NOT NULL,
     category TEXT NOT NULL,
     default_qty_per_slot INTEGER NOT NULL CHECK (default_qty_per_slot > 0),
+    price INTEGER NOT NULL DEFAULT 0 CHECK (price >= 0),
     UNIQUE (outlet_id, name)
 );
 CREATE TABLE IF NOT EXISTS pickup_slot (
@@ -53,6 +56,7 @@ CREATE TABLE IF NOT EXISTS orders (
     pickup_code TEXT NOT NULL,
     review_reason TEXT,
     closure_reason TEXT,
+    payment_ref TEXT,
     created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS order_line (
@@ -81,6 +85,24 @@ CREATE TABLE IF NOT EXISTS notification (
     message TEXT NOT NULL,
     created_at TEXT NOT NULL,
     is_read INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS app_user (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    salt TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN (
+        'Customer', 'Outlet Staff', 'Outlet Manager', 'Campus Admin')),
+    display_name TEXT NOT NULL,
+    campus_id TEXT,
+    outlet_id INTEGER REFERENCES outlet(id)
+);
+CREATE TABLE IF NOT EXISTS draft (
+    user_id INTEGER NOT NULL REFERENCES app_user(id),
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, key)
 );
 """
 

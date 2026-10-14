@@ -66,11 +66,12 @@ def _check_availability(conn, slot, cart) -> None:
             "Your pre-order was not placed. Nothing has been reserved.", lines=failures)
 
 
-def submit_order(outlet_id, slot_id, customer_id, customer_name, lines) -> dict:
+def submit_order(outlet_id, slot_id, customer_id, customer_name, lines, payment_ref=None) -> dict:
     """Place a pre-order. All lines are reserved together or not at all (BR-04, BR-05).
 
     `lines` is a list of {"item_id": int, "quantity": int}. Returns the order id,
-    its pickup code, its status and the review reason (None when auto-confirmed).
+    its pickup code, its status, the review reason (None when auto-confirmed) and the total.
+    `payment_ref` is the demo checkout reference; no money moves (A10).
     """
     customer_id = (customer_id or "").strip()
     customer_name = (customer_name or "").strip()
@@ -91,9 +92,9 @@ def submit_order(outlet_id, slot_id, customer_id, customer_name, lines) -> dict:
 
         cur = conn.execute(
             "INSERT INTO orders (outlet_id, slot_id, customer_id, customer_name, status, "
-            "pickup_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "pickup_code, payment_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (outlet_id, slot_id, customer_id, customer_name, PENDING,
-             f"{secrets.randbelow(10000):04d}", clock.now_str(conn)))
+             f"{secrets.randbelow(10000):04d}", payment_ref, clock.now_str(conn)))
         order_id = cur.lastrowid
         conn.executemany(
             "INSERT INTO order_line (order_id, item_id, quantity) VALUES (?, ?, ?)",
@@ -110,9 +111,14 @@ def submit_order(outlet_id, slot_id, customer_id, customer_name, lines) -> dict:
 
         row = conn.execute(
             "SELECT status, pickup_code FROM orders WHERE id = ?", (order_id,)).fetchone()
+        total = conn.execute(
+            "SELECT COALESCE(SUM(l.quantity * m.price), 0) FROM order_line l "
+            "JOIN menu_item m ON m.id = l.item_id WHERE l.order_id = ?", (order_id,)).fetchone()[0]
         return {
             "order_id": order_id,
             "pickup_code": row["pickup_code"],
             "status": row["status"],
             "review_reason": review_reason,
+            "payment_ref": payment_ref,
+            "total": total,
         }

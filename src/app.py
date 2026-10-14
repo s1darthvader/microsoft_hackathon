@@ -2,7 +2,7 @@
 import streamlit as st
 
 from core.seed import init_db
-from ui import admin, common, customer, manager, staff
+from ui import admin, common, customer, login, manager, staff
 
 PAGES = {
     "Customer": customer,
@@ -14,7 +14,12 @@ PAGES = {
 st.set_page_config(page_title="Campus Food Pre-Order", page_icon="🍽️", layout="wide")
 init_db()
 
-role, ctx = common.sidebar(list(PAGES))
-st.title(role)
+user = common.current_user()
+if user is None:
+    login.render()
+    st.stop()
+
+ctx = common.sidebar(user)
+st.title(user["role"] if not user["outlet_name"] else f"{user['role']} · {user['outlet_name']}")
 common.show_flash()
-PAGES[role].render(ctx)
+PAGES[user["role"]].render(ctx)

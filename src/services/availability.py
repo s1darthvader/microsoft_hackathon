@@ -8,7 +8,7 @@ from core.rules import COUNTED
 _COUNTED_SQL = ",".join(f"'{s}'" for s in COUNTED)  # constants, not user input
 
 _ITEM_SQL = f"""
-SELECT m.id AS item_id, m.outlet_id, m.name, m.category,
+SELECT m.id AS item_id, m.outlet_id, m.name, m.category, m.price,
        a.slot_id, a.capacity, a.is_unavailable, a.unavailable_reason,
        COALESCE((SELECT SUM(l.quantity)
                    FROM order_line l JOIN orders o ON o.id = l.order_id
@@ -30,6 +30,7 @@ def _shape(row) -> dict:
         "outlet_id": row["outlet_id"],
         "name": row["name"],
         "category": row["category"],
+        "price": row["price"],
         "slot_id": row["slot_id"],
         "capacity": row["capacity"],
         "counted": row["counted"],

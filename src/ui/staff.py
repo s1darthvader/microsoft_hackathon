@@ -4,7 +4,7 @@ from itertools import groupby
 import streamlit as st
 
 from core.rules import CONFIRMED, PENDING, PREPARING, READY, STAFF, STATUSES
-from services import clock, lifecycle, notifications, queries
+from services import clock, drafts, lifecycle, notifications, queries
 from ui import common
 
 ACTION_LABEL = {
@@ -20,6 +20,7 @@ SUCCESS = {
     "mark_ready": "marked Ready", "mark_collected": "collected", "outlet_cancel": "cancelled",
 }
 ACTIVE = [PENDING, CONFIRMED, PREPARING, READY]
+NEEDS_REASON = ("reject", "outlet_cancel")
 
 
 def render(ctx: dict) -> None:
@@ -43,7 +44,7 @@ def render(ctx: dict) -> None:
     for (date, label), group in groupby(orders, key=lambda o: (o["date"], o["slot_label"])):
         st.subheader(f"{clock.long_date(date)} · {label}")
         for o in group:
-            _order_card(o)
+            _order_card(o, ctx["user"]["id"])
 
 
 def _flags(o: dict) -> str:
@@ -57,7 +58,7 @@ def _flags(o: dict) -> str:
     return " · ".join(parts)
 
 
-def _order_card(o: dict) -> None:
+def _order_card(o: dict, user_id: int) -> None:
     with st.container(border=True):
         st.markdown(
             f"**#{o['id']}** · {o['customer_name']} ({o['customer_id']}) · "
@@ -75,12 +76,16 @@ def _order_card(o: dict) -> None:
         if not actions:
             return
         reason = code = None
-        if "reject" in actions or "outlet_cancel" in actions:
-            reason = st.text_input("Reason", key=f"reason_{o['id']}")
+        reason_key = f"reason_{o['id']}"
+        if any(a in NEEDS_REASON for a in actions):
+            # A draft: a half-typed reason survives sign-out and refresh.
+            reason = st.text_input("Reason", **common.persist(user_id, reason_key, ""))
         if "mark_collected" in actions:
             code = st.text_input("Customer pickup code", key=f"code_{o['id']}", max_chars=4)
         for col, action in zip(st.columns(len(actions)), actions):
             if col.button(ACTION_LABEL[action], key=f"{action}_{o['id']}"):
                 common.run_action(
                     lifecycle.transition, o["id"], action, STAFF, reason=reason, pickup_code=code,
-                    success=f"Order #{o['id']} {SUCCESS[action]}.")
+                    success=f"Order #{o['id']} {SUCCESS[action]}.",
+                    on_success=(lambda _: drafts.clear(user_id, reason_key))
+                    if action in NEEDS_REASON else None)

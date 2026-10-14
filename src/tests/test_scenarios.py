@@ -4,8 +4,8 @@ from datetime import datetime
 import pytest
 
 from core.rules import STAFF, BusinessRuleError
-from helpers import MAIN, act, available, history, place, status
-from services import clock
+from helpers import D4, MAIN, act, available, history, item_id, outlet_id, place, slot_id, status
+from services import clock, ordering, queries
 
 
 def test_at01_full_lifecycle():
@@ -31,3 +31,14 @@ def test_at13_started_slot_is_refused():
     with pytest.raises(BusinessRuleError, match="already started"):
         place(MAIN, "12:30", {"Masala Dosa": 1})
     assert place(MAIN, "13:00", {"Masala Dosa": 1})["status"] == "Confirmed"
+
+
+def test_demo_payment_reference_and_total_are_recorded():
+    result = ordering.submit_order(
+        outlet_id(MAIN), slot_id(D4, "12:00"), "S101", "Asha",
+        [{"item_id": item_id("Masala Dosa"), "quantity": 2},
+         {"item_id": item_id("Veg Sandwich"), "quantity": 1}],
+        payment_ref="DEMO-abc123")
+    assert result["total"] == 2 * 60 + 40
+    order = queries.get_order(result["order_id"])
+    assert order["payment_ref"] == "DEMO-abc123" and order["total"] == 160
